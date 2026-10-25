@@ -25,21 +25,54 @@ def ask(question: str) -> str:
     client = genai.Client(api_key=get_api_key())
     response = client.models.generate_content(model=MODEL, contents=question)
 
-    # TODO(第1回 演習): response.usage_metadata から
-    #   入力トークン数と出力トークン数を表示してみよう（Copilotに頼んでよい）
+    if response.usage_metadata is not None:
+        print(
+            "[tokens] "
+            f"入力: {response.usage_metadata.prompt_token_count}, "
+            f"出力: {response.usage_metadata.candidates_token_count}"
+        )
 
     return response.text
 
 
+def print_usage(response) -> None:
+    if response.usage_metadata is not None:
+        print(
+            "[tokens] "
+            f"入力: {response.usage_metadata.prompt_token_count}, "
+            f"出力: {response.usage_metadata.candidates_token_count}"
+        )
+
+
 def main() -> None:
-    parser = argparse.ArgumentParser(description="素のLLMに質問する")
+    parser = argparse.ArgumentParser(description="素のLLMと会話する")
     parser.add_argument("question", nargs="?", default=DEFAULT_QUESTION)
     args = parser.parse_args()
+
+    client = genai.Client(api_key=get_api_key())
+    chat = client.chats.create(model=MODEL)
 
     print(f"[model] {MODEL}")
     print(f"[質問] {args.question}\n")
     try:
-        print(ask(args.question))
+        response = chat.send_message(args.question)
+        print_usage(response)
+        print(response.text)
+
+        while True:
+            try:
+                question = input("\n[続けて質問] ")
+            except EOFError:
+                break
+
+            if question.strip().lower() in {"exit", "quit", "終了"}:
+                break
+            if not question.strip():
+                continue
+
+            response = chat.send_message(question)
+            print_usage(response)
+            print(f"\n{response.text}")
     except errors.APIError as e:
         print(api_error_message(e.code, e.message))
         raise SystemExit(1)
