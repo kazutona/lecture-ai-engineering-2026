@@ -61,7 +61,7 @@ def main() -> None:
 
         while True:
             try:
-                question = input("\n[続けて質問] ")
+                question = input("\n[続けて質問（終了するには exit を入力）] ")
             except EOFError:
                 break
 
