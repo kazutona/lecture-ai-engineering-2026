@@ -1,6 +1,7 @@
 """ツールのテスト（LLMもAPIキーも使わない）。"""
 
 import json
+from pathlib import Path
 
 from app import tools
 
@@ -46,3 +47,15 @@ def test_default_question_of_lecture1_is_answerable_from_glossary():
     assert "3レベル" in DEFAULT_QUESTION
     hits = json.loads(tools.search_glossary("3レベル"))
     assert hits[0]["term"] == "宿題の3レベル"
+
+
+def test_save_learning_log_writes_markdown_file(tmp_path, monkeypatch):
+    log_dir = tmp_path / "learning_log"
+    monkeypatch.setattr(tools, "LEARNING_LOG_DIR", log_dir)
+
+    result = tools.save_learning_log("LoRA 学習", "LoRA は低ランク行列で学習する。")
+
+    files = list(log_dir.glob("*.md"))
+    assert len(files) == 1
+    assert files[0].read_text(encoding="utf-8") == "# LoRA 学習\n\nLoRA は低ランク行列で学習する。\n"
+    assert "保存しました" in result

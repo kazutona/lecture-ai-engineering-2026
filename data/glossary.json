@@ -523,6 +523,15 @@
       "category": "MCP",
       "definition": "指定したURLのページを取得し、本文をMarkdownにして返す既製のMCPサーバー（Python製、uvx mcp-server-fetch で起動）。本講座では「設定ファイルに書くだけで外部ツールが増える」例として使う。モデルが選んだURLに実際にアクセスするので、どこへ何を送るかは利用者が把握しておく。",
       "related": ["mcp-server", "external-tool", "guardrail"]
-    }
+    },
+    {
+    "id": "basketball-retry",
+    "term": "Basketball Retry",
+    "aliases": ["basketball", "BBR", "basketball loop"],
+    "lecture": 3,
+    "category": "エージェント",
+    "definition": "（架空の用語）エージェントが同じツールを同じ引数で何度も呼び続け、前に進んでいるように見えて実際は一歩も進んでいない状態。言葉の由来はレブロン・ジェイムズ。ツールの返り値が曖昧で、モデルが『もう一度試せば違う結果が出る』と判断したときに起きやすい。--trace で同じ tool call の行が並んでいたら疑う。返り値に『見つからなかった理由』や『次に試すべきこと』を書くと抑えられる。",
+    "related": ["agent-loop", "tool-description", "rate-limit"]
+}
   ]
 }

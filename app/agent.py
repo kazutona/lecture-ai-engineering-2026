@@ -16,7 +16,8 @@ import inspect
 import json
 from pathlib import Path
 
-from pydantic_ai import Agent
+#from pydantic_ai import Agent
+from pydantic_ai import Agent, DeferredToolRequests, DeferredToolResults, ToolDenied
 from pydantic_ai.exceptions import ModelHTTPError
 from fastmcp import Client
 from pydantic_ai.mcp import MCPToolset, StdioTransport
@@ -38,9 +39,12 @@ INSTRUCTIONS = """\
 """
 
 # モデルは実行時に渡す（テストではAPIを呼ばない TestModel に差し替えるため）
-agent = Agent(instructions=INSTRUCTIONS)
+#agent = Agent(instructions=INSTRUCTIONS)
+agent = Agent(instructions=INSTRUCTIONS, output_type=[str, DeferredToolRequests])
 agent.tool_plain(tools.search_glossary)
 agent.tool_plain(tools.get_lecture_summary)
+agent.tool_plain(tools.make_quiz)
+agent.tool_plain(tools.save_learning_log, requires_approval=True)
 
 # TODO(第3回 演習): tools.py に make_quiz を作り、ここで登録しよう
 
@@ -48,6 +52,7 @@ agent.tool_plain(tools.get_lecture_summary)
 MCP_CONFIG = Path(__file__).resolve().parent / "mcp_servers.json"
 
 
+#mcp_servers.json を読んで MCP サーバーにつなぐ
 def load_mcp_servers(config_path: Path = MCP_CONFIG) -> list[MCPToolset]:
     """設定ファイル（mcpServers 形式）を読み、サーバーごとに接続（MCPToolset）を作る。
 
@@ -70,16 +75,30 @@ def load_mcp_servers(config_path: Path = MCP_CONFIG) -> list[MCPToolset]:
         toolsets.append(MCPToolset(Client(transport, mode="legacy")).prefixed(name))
     return toolsets
 
-
+#MCP 経由でツールを受け取るエージェントを作る
 def build_mcp_agent(config_path: Path = MCP_CONFIG) -> Agent:
     """第5回: 関数を直接登録する代わりに、MCP サーバーが公開するツールを使うエージェント。INSTRUCTIONS は同じ。"""
     return Agent(instructions=INSTRUCTIONS, toolsets=load_mcp_servers(config_path))
 
-
+#geminiのモデルを API キー付きで作る
 def build_model() -> GoogleModel:
     return GoogleModel(MODEL, provider=GoogleProvider(api_key=get_api_key()))
 
+def ask_approval(requests: DeferredToolRequests) -> DeferredToolResults:
+    """承認待ちのツール呼び出しを1件ずつ表示し、y/N で許可するか利用者に聞く。"""
+    results = DeferredToolResults()
+    for call in requests.approvals:
+        print(f"\n[確認] モデルが {call.tool_name} を実行しようとしています")
+        for key, value in call.args_as_dict().items():
+            print(f"  {key}: {value}")
+        answer = input("実行してよいですか？ [y/N] ").strip().lower()
+        if answer in ("y", "yes"):
+            results.approvals[call.tool_call_id] = True
+        else:
+            results.approvals[call.tool_call_id] = ToolDenied("利用者が許可しなかったため、保存していません。")
+    return results
 
+#モデルに見えているツール一覧を表示（--list-tools）
 def print_tools(target: Agent) -> None:
     """モデルに見えているツールの一覧（名前・説明文・引数）を表示する。LLM は呼ばない。
 
@@ -96,7 +115,7 @@ def print_tools(target: Agent) -> None:
         params = tool.parameters_json_schema.get("properties", {})
         print(f"  引数: {json.dumps(params, ensure_ascii=False)}")
 
-
+# どのツールがどの引数で呼ばれたかを表示（--trace）
 def print_trace(result) -> None:
     """どのツールが、どの引数で呼ばれ、何を返したかを表示する。"""
     print("\n--- trace ---")
@@ -127,8 +146,19 @@ def main() -> None:
     print(f"[model] {MODEL}")
     if args.mcp:
         print("[tools] MCP サーバー（app/mcp_servers.json）")
+#    try:
+#        result = target.run_sync(args.question, model=build_model())
+    model = build_model()
     try:
-        result = target.run_sync(args.question, model=build_model())
+        result = target.run_sync(args.question, model=model)
+        # 承認待ちのツールがあれば利用者に確認し、その答えを渡して続きを実行する
+        while isinstance(result.output, DeferredToolRequests):
+            result = target.run_sync(
+                message_history=result.all_messages(),
+                deferred_tool_results=ask_approval(result.output),
+                model=model,
+                usage=result.usage,  # 承認前後の requests を合算して --trace に出す
+            )
     except ModelHTTPError as e:
         print(api_error_message(e.status_code, str(e.body)[:200]))
         raise SystemExit(1)
