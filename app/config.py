@@ -8,7 +8,10 @@ from pathlib import Path
 
 # 既定モデル。環境変数 AIE_MODEL を設定すると切り替えられる。
 #   例: export AIE_MODEL=gemini-3.5-flash
-DEFAULT_MODEL = "gemini-3.5-flash-lite"
+#DEFAULT_MODEL = "gemini-3.5-flash-lite"
+#DEFAULT_MODEL = "gemini-4-hydrogen"     # 性能も上げたい場合
+DEFAULT_MODEL = "gemini-3.1-flash-lite"
+
 MODEL = os.getenv("AIE_MODEL", DEFAULT_MODEL)
 
 # 第5回: 1ページを1チャンクとして検索する。索引はscripts/build_rag_index.pyで作成する。
